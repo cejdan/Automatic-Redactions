@@ -1,26 +1,56 @@
 
-import pytest
 import argparse
 import math
+import re
+import glob
+import os
+import nltk
 
-parser = argparse.ArgumentParser(description="Calculate volume of a cylinder")
-parser.add_argument('--radius', type=int, help='Radius of Cylinder')
-parser.add_argument('--height', type=int, help='Height of Cylinder')
-args = parser.parse_args()
+#
+# parser = argparse.ArgumentParser(description="Calculate volume of a cylinder")
+# parser.add_argument('--radius', type=int, help='Radius of Cylinder')
+# parser.add_argument('--height', type=int, help='Height of Cylinder')
+# args = parser.parse_args()
 
-
-def cylinder_volume(radius, height):
-    vol = (math.pi) * (radius ** 2) * (height)
-    return vol
+#
+# def cylinder_volume(radius, height):
+#    vol = (math.pi) * (radius ** 2) * (height)
+#    return vol
 
 
 if __name__ == '__main__':
-    print(cylinder_volume(2,4))
-    print(cylinder_volume(args.radius, args.height))
+
+    #What I want is a list of document names. I can accept an input *.txt, and I want to find all the strings "news1, news2, etc.
+    #and make them into a list, which I can then cycle through when using nltk and spacy.
+
+    myInput = "*.txt"
+    myFileNames = []
+    for name in glob.glob('../docs/'+myInput):
+        print(os.path.abspath(name))
+        myFileNames.append(os.path.abspath(name))
+    print(myFileNames)
+
+
+    myNews1 = open(myFileNames[1], 'r', encoding="UTF-8")
+    myNews = myNews1.read()
+    myNews1.close()
+
+
+    block = "\u2588"
+    match = re.compile("the ")
+    match2 = re.compile("coronavirus")
+    match3 = re.compile(block+" "+block)
+    redactNews = match.sub(block+" ", myNews)
+    redactNews = match2.sub(block, redactNews)
+    redactNews = match3.sub(block, redactNews)
+    print(myNews)
+    print(redactNews)
 
 
 
 
+
+#
 # def main():
 # 	pass
 #
