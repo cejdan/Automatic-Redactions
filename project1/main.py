@@ -1,10 +1,72 @@
-
 import argparse
 import math
 import re
 import glob
 import os
 import nltk
+import spacy
+from spacy import displacy
+from collections import Counter
+import en_core_web_sm
+nlp = en_core_web_sm.load()
+
+
+#This project needs to:
+# 1 - Accept a *.txt or *.md input (or both) and find all the .txt or .md files in the project folder.
+# 2 - Read the file(s) and redact (Store in a list?) all words and related words to the provided flags,
+#     'names', 'genders', and 'dates'.
+# 3 - Redact all words and related words from the provided 'concept' flag(s) - can use word matrices from Spacy.
+#     1 method call for each provided concept flag.
+# 4 - Double-check sentences, redact full sentences if the meaning is still clear. How, not sure yet. Optional for now.
+# 5 - Actually replace all redacted words with either a single Block U+2588 character, or multiple block characters.
+# 6 - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
+# 7 - Generate a statistics function, which prints information about the run to stdout, stderr, or a file.
+# 8 - Write tests for each method in seperate test_etc.py files.
+
+
+
+#Need a global variable myFileNames, accessible to all the methods.
+myFileNames = []
+
+
+def findDocs(userglob):
+    # This function takes in a glob like *.txt and appends a list of all the file names with that extention it can find.
+    myInput = userglob
+
+    if myInput == '*.txt':
+        myPattern = re.compile(r'\.txt')
+    elif myInput == "*.md":
+        myPattern = re.compile(r'\.md')
+    else:
+        raise NameError("Sorry, the --input glob was neither *.txt or *.md")
+
+    for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+        for items in files[2]:
+            myMatch = re.search(myPattern, items)
+            if myMatch:
+                currentFilePath = (files[0] + '\\' + items)
+                myFileNames.append(currentFilePath)
+
+
+def redactNames(document):
+
+    # I guess step1 is to use NLTK on the provided document to split the string into words.
+    #Then we will classify them as Names or Not Names
+    #Then I will add all the strings to-be-redacted to a list. This can be a running list between methods.
+
+    #document input must be a string.
+    tokens = nltk.word_tokenize(document)
+    print(tokens)
+    
+
+
+
+
+
+
+
+
+
 
 #
 # parser = argparse.ArgumentParser(description="Calculate volume of a cylinder")
@@ -18,38 +80,42 @@ import nltk
 #    return vol
 
 
+
+
 if __name__ == '__main__':
+    #
+    # What I want is a list of document names. I can accept an input *.txt, and I want to find all the strings
+    # "news1, news2, etc. and make them into a list, which I can then cycle through when using nltk and spacy.
 
-    #What I want is a list of document names. I can accept an input *.txt, and I want to find all the strings "news1, news2, etc.
-    #and make them into a list, which I can then cycle through when using nltk and spacy.
-
-    myInput = "*.txt"
-    myFileNames = []
-    for name in glob.glob('../docs/'+myInput):
-        print(os.path.abspath(name))
-        myFileNames.append(os.path.abspath(name))
+    fileext = "*.txt"
+    findDocs(fileext)
     print(myFileNames)
 
+    if(myFileNames):
+        myNews1 = open(myFileNames[1], 'r', encoding="UTF-8")
+        myNews = myNews1.read()
+        myNews1.close()
 
-    myNews1 = open(myFileNames[1], 'r', encoding="UTF-8")
-    myNews = myNews1.read()
-    myNews1.close()
-
+    redactNames(myNews)
 
     block = "\u2588"
-    match = re.compile("the ")
-    match2 = re.compile("coronavirus")
-    match3 = re.compile(block+" "+block)
-    redactNews = match.sub(block+" ", myNews)
-    redactNews = match2.sub(block, redactNews)
-    redactNews = match3.sub(block, redactNews)
+    #match = re.compile("the ")
+    #match2 = re.compile("coronavirus")
+    #match3 = re.compile(block + " " + block)
+    #redactNews = match.sub(block + " ", myNews)
+    #redactNews = match2.sub(block, redactNews)
+    #redactNews = match3.sub(block, redactNews)
     print(myNews)
-    print(redactNews)
+    #print(redactNews)
 
 
 
 
 
+
+
+    #print(myFileNames)
+    #print(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 #
 # def main():
 # 	pass
