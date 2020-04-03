@@ -2,7 +2,7 @@
 # Written by Nicholas Cejda
 # Student ID: 113825637
 
-
+from __future__ import print_function
 import argparse
 import math
 import re
@@ -16,34 +16,35 @@ from collections import Counter
 from collections import OrderedDict
 from spacy.pipeline import EntityRuler
 import pandas as pd
+import sys
+
+
 
 
 #Had to add some exceptions b/c Spacy's model isn't perfect. These are specific to my test files in the docs/ folder.
+#ruler = EntityRuler(nlp, overwrite_ents=True)
+#patterns = [{"label": "PERSON", "pattern": [{"LOWER": "secretary"}, {"LOWER": "of state"}]},
+#            {"label": "PERSON", "pattern": "Sanders"},
+#            {"label": "PERSON", "pattern": "Peter F. Nardulli"},
+#            {"label": "PERSON", "pattern": "Hillary Clinton"},
+#            {"label": "ORG", "pattern": "Charlotte Hornets"}]
+
+#ruler.add_patterns(patterns)
+#nlp.add_pipe(ruler)
+
+
+#GLOBAL VARIABLES!
+myFileNames = []
+myRedactedDocs = []
 nlp = spacy.load("en_core_web_md")
 matcher = Matcher(nlp.vocab)
-ruler = EntityRuler(nlp, overwrite_ents=True)
-patterns = [{"label": "PERSON", "pattern": [{"LOWER": "secretary"}, {"LOWER": "of state"}]},
-            {"label": "PERSON", "pattern": "Sanders"},
-            {"label": "PERSON", "pattern": "Peter F. Nardulli"},
-            {"label": "PERSON", "pattern": "Hillary Clinton"},
-            {"label": "ORG", "pattern": "Charlotte Hornets"}]
-
-ruler.add_patterns(patterns)
-nlp.add_pipe(ruler)
-
-myFileNames = []
-
-myRedactedDocs = []
-
-
-
 
 
 #This project needs to:
 # DONE 1 - Accept a *.txt or *.md input (or both) and find all the .txt or .md files in the project folder.
 # DONE 2 - Read the file(s) and redact (Store in a list?) all words and related words to the provided flags,
 #     'names', 'genders', and 'dates'.
-# 3 - Redact all words and related words from the provided 'concept' flag(s) - can use word matrices from Spacy.
+# DONE 3 - Redact all words and related words from the provided 'concept' flag(s) - can use word matrices from Spacy.
 #     1 method call for each provided concept flag.
 # DONE 4 - Actually replace all redacted words with either a single Block U+2588 character, or multiple block characters.
 # 5 - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
@@ -51,21 +52,18 @@ myRedactedDocs = []
 # 7 - Write tests for each method in seperate test_etc.py files.
 
 
-#nltk.download('punkt')
-#Need a global variable myFileNames, accessible to all the methods.
-
-
-
 def findDocs(userglob):
-    # This function takes in a glob like *.txt and appends a list of all the file names with that extention it can find.
+    # This function takes in a glob like *.txt and appends a list of all the file names with that extension it can find.
     myInput = userglob
 
+    folderCheck = re.compile(r".*/\.\*")
+
     if myInput == '*.txt':
-        myPattern = re.compile(r'\.txt')
+        myPattern = re.compile(r'\.txt$')
     elif myInput == "*.md":
-        myPattern = re.compile(r'\.md')
+        myPattern = re.compile(r'\.md$')
     else:
-        raise NameError("Sorry, the --input glob was neither *.txt or *.md")
+        raise NameError("Sorry, the --input glob was neither '*.txt' or '*.md' or 'folder/*.txt' or 'folder/*.txt'")
 
     for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
         for items in files[2]:
@@ -207,6 +205,7 @@ def findDates(documents, dateFlag):
         elif len(myRedactList) < len(documents):
             myRedactList.append(thisRedactList)
 
+
 def findConcepts(documents, concept, conceptFlag):
     if not conceptFlag:
         return
@@ -231,7 +230,11 @@ def findConcepts(documents, concept, conceptFlag):
         elif len(myRedactList) < len(documents):
             myRedactList.append(thisRedactList)
 
+# This eprint method is taken directly from StackOverflow:
+# https://stackoverflow.com/questions/5574702/how-to-print-to-stderr-in-python
 
+def eprint(*args, **kwargs):
+    print(*args, file=sys.stderr, **kwargs)
 
 def runStats(outputType, fileNames):
 
@@ -249,9 +252,73 @@ def runStats(outputType, fileNames):
             else:
                 print(mystats.groupby('Redaction_Type').count()[['Redacted_String']])
 
+    if outputType == "stderr":
+        for i in range(0, len(fileNames)):
+            simpleFileName = os.path.basename(fileNames[i])
+            mystats = pd.DataFrame(myRedactList[i])
+            mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
+            eprint("\n\n")
+            eprint("All redactions from: " + simpleFileName)
+            eprint(mystats)
+            eprint("Summary of: " + simpleFileName)
+            if mystats.empty:
+                eprint("No redactions made in this document.")
+            else:
+                eprint(mystats.groupby('Redaction_Type').count()[['Redacted_String']])
 
-def outputDoc(fileNames, foldername = "output/"):
-    pass
+    else:
+        #The outputType is a string, which will be used as a file, outputted to the same folder where output doc goes.
+        #outputCheck = re.compile(r".*/$")
+        #if not re.search(outputCheck,outputType):
+            #raise NameError("The string passed to ")
+        myStatsOutputPath = os.path.join(os.getcwd(),str(outputType + ".csv"))
+
+            # Here is what you will do.
+            # First, take your pandas df, and add a column called from_file
+            # All the rows will get the simpleFileName of that filename[i]
+            # Merge this modified df with a larger df, until all are added.
+            #       pd.concat(objs, axis=0, join='outer', ignore_index=False, keys=None,
+            #           levels=None, names=None, verify_integrity=False, copy=True)
+        fulldf = pd.DataFrame()
+        for i in range(0,len(fileNames)):
+            simpleFileName = os.path.basename(fileNames[i])
+            mystats = pd.DataFrame(myRedactList[i])
+            mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
+            fileList = []
+            mylength = int(mystats[['Redacted_String']].count()[0]) #This line is broken right now.
+            for j in range(0,mylength):
+                fileList.append(simpleFileName)
+            mystats['from_file'] = fileList
+            fulldf = pd.concat([mystats,fulldf])
+
+        fulldf.to_csv(myStatsOutputPath)
+        #fulldf.groupby('Redaction_Type').count()[['Redacted_String']]
+
+
+
+
+
+
+def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
+
+    if foldername == "output\\" and not sys.platform == "win32": #Does a quick check to see if you are on Windows or not.
+        foldername = "output/" #Switches the default filepath if so.
+
+    #Needs to check for a valid foldername input here.
+
+    myOutputDir = os.path.join(os.getcwd(),foldername)
+    if not os.path.exists(myOutputDir):
+        os.mkdir(myOutputDir)
+
+    for i in range(0,len(fileNames)):
+        baseFileName = os.path.basename(fileNames[i])
+        newPathName = str(myOutputDir + baseFileName + ".redacted")
+
+        myUnicodeDoc = str(redactedDocs[i]).encode("utf8")
+
+        with open(newPathName, "wb") as file:
+            file.write(myUnicodeDoc)
+            file.close()
 
 
 def redact(documents):
@@ -354,10 +421,10 @@ if __name__ == '__main__':
 
     findNamesFlag = True
     findGendersFlag = False
-    findDatesFlag = True
-    findConceptFlag = True
+    findDatesFlag = False
+    findConceptFlag = False
     conceptWord1 = "politics"
-    conceptWord2 = "politic"
+    conceptWord2 = "virus"
     fileext = "*.txt"   #need to update findDocs to accept folder inputs as well, like "cooldocs/*.txt"
 
 
@@ -368,7 +435,7 @@ if __name__ == '__main__':
 
     if(myFileNames):
         for x in range(0,len(myFileNames)):
-            myFile1 = open(myFileNames[x], 'r', encoding="UTF-8")
+            myFile1 = open(myFileNames[x], 'r', encoding="utf8")
             unredactedDocs.append(myFile1.read())
             myFile1.close()
 
@@ -384,7 +451,8 @@ if __name__ == '__main__':
 
     print(myRedactList)
 
-    runStats("stdout",myFileNames)
+    runStats("coolstats",myFileNames)
+    #outputDoc(myFileNames, myRedactedDocs)
 
 
     #for x in range(0,len(myRedactedDocs)):
