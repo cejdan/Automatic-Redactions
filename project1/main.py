@@ -4,16 +4,10 @@
 
 from __future__ import print_function
 import argparse
-import math
 import re
-import glob
 import os
-import nltk
 import spacy
-from spacy import displacy
 from spacy.matcher import Matcher
-from collections import Counter
-from collections import OrderedDict
 from spacy.pipeline import EntityRuler
 import pandas as pd
 import sys
@@ -36,6 +30,8 @@ import sys
 #GLOBAL VARIABLES!
 myFileNames = []
 myRedactedDocs = []
+unredactedDocs = []
+myRedactList = []
 nlp = spacy.load("en_core_web_md")
 matcher = Matcher(nlp.vocab)
 
@@ -47,9 +43,15 @@ matcher = Matcher(nlp.vocab)
 # DONE 3 - Redact all words and related words from the provided 'concept' flag(s) - can use word matrices from Spacy.
 #     1 method call for each provided concept flag.
 # DONE 4 - Actually replace all redacted words with either a single Block U+2588 character, or multiple block characters.
-# 5 - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
-# 6 - Generate a statistics function, which prints information about the run to stdout, stderr, or a file.
+# DONE - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
+# DONE - Generate a statistics function, which prints information about the run to stdout, stderr, or a file.
 # 7 - Write tests for each method in seperate test_etc.py files.
+
+#Still To-Do:
+# TESTS!!!!!
+# Write Readme.md!!
+# fix findDocs so that it can accept folder inputs as well.
+# fix stats so that it outputs to the same folder as outputdocs.
 
 
 def findDocs(userglob):
@@ -87,9 +89,7 @@ def findTokenLocs(document, myToken):
     return myMatchLocs
 
 
-def findNames(documents, nameFlag, fromGender):
-    if not nameFlag:
-        return
+def findNames(documents, fromGender):
 
     # Step 1, use Spacy's en-core-web-lg module to identify Named Entites.
     # Step 2, add all People and their token locs to the Redaction list.
@@ -134,11 +134,7 @@ def findNames(documents, nameFlag, fromGender):
             myRedactList.append(thisRedactList)
 
 
-def findGenders(documents, genderFlag, nameFlag):
-
-    if not genderFlag:
-        return
-    pass
+def findGenders(documents, nameFlag):
 
 # Some of the Male and Female words were taken from
 # https://medium.com/@rajat.jain1/natural-language-extraction-using-spacy-on-a-set-of-novels-88b159d68686
@@ -183,9 +179,7 @@ def findGenders(documents, genderFlag, nameFlag):
             myRedactList.append(thisRedactList)
 
 
-def findDates(documents, dateFlag):
-    if not dateFlag:
-        return
+def findDates(documents):
 
     for i in range(0, len(documents)):
         doc = nlp(documents[i])
@@ -206,18 +200,19 @@ def findDates(documents, dateFlag):
             myRedactList.append(thisRedactList)
 
 
-def findConcepts(documents, concept, conceptFlag):
-    if not conceptFlag:
-        return
+def findConcepts(documents, concept):
+
     #Ok, need to build a similarity matrix for each word. Anything over 0.45 gets included as similar and added
     #to the redact list.
     conceptdoc = nlp(concept)
+    if not conceptdoc[0].has_vector:
+        raise NameError("Apologies, the concept you entered has no word vector in the Spacy model. This means it can't assign similarity scores! Please try again with a more common word, or maybe check your spelling?")
     for i in range(0,len(documents)):
         thisRedactList = []
         doc = nlp(documents[i])
         for j in range(0,len(doc)):
             if doc[j].has_vector:
-                if doc[j].similarity(conceptdoc[0]) > 0.45: #I really like >0.45, it works really nicely! Very impressive!
+                if doc[j].similarity(conceptdoc[0]) >= 0.5: #I really like >0.5, it works really nicely! Very impressive!
                     token_locs = [j, j+1]
                     mySmallList = [doc[j].text, token_locs, str("Concept: " + concept)]
                     thisRedactList.append(mySmallList)
@@ -230,16 +225,16 @@ def findConcepts(documents, concept, conceptFlag):
         elif len(myRedactList) < len(documents):
             myRedactList.append(thisRedactList)
 
-# This eprint method is taken directly from StackOverflow:
+# This eprint method is taken directly from StackOverflow user MarcH:
 # https://stackoverflow.com/questions/5574702/how-to-print-to-stderr-in-python
-
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
+
 
 def runStats(outputType, fileNames):
 
     if outputType == "stdout":
-        for i in range(0,len(fileNames)):
+        for i in range(0,len(myRedactList)):
             simpleFileName = os.path.basename(fileNames[i])
             mystats = pd.DataFrame(myRedactList[i])
             mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
@@ -253,7 +248,7 @@ def runStats(outputType, fileNames):
                 print(mystats.groupby('Redaction_Type').count()[['Redacted_String']])
 
     if outputType == "stderr":
-        for i in range(0, len(fileNames)):
+        for i in range(0, len(myRedactList)):
             simpleFileName = os.path.basename(fileNames[i])
             mystats = pd.DataFrame(myRedactList[i])
             mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
@@ -267,6 +262,8 @@ def runStats(outputType, fileNames):
                 eprint(mystats.groupby('Redaction_Type').count()[['Redacted_String']])
 
     else:
+        if not type(outputType) == str:
+            raise NameError("Please provide either 'stdout', 'stderr', or a string input (filename) to the --stats flag. Your input was not a string." )
         #The outputType is a string, which will be used as a file, outputted to the same folder where output doc goes.
         #outputCheck = re.compile(r".*/$")
         #if not re.search(outputCheck,outputType):
@@ -280,23 +277,23 @@ def runStats(outputType, fileNames):
             #       pd.concat(objs, axis=0, join='outer', ignore_index=False, keys=None,
             #           levels=None, names=None, verify_integrity=False, copy=True)
         fulldf = pd.DataFrame()
-        for i in range(0,len(fileNames)):
+        for i in range(0,len(myRedactList)):
             simpleFileName = os.path.basename(fileNames[i])
             mystats = pd.DataFrame(myRedactList[i])
             mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
             fileList = []
-            mylength = int(mystats[['Redacted_String']].count()[0]) #This line is broken right now.
-            for j in range(0,mylength):
+            for j in range(0,len(mystats.index)):
                 fileList.append(simpleFileName)
             mystats['from_file'] = fileList
-            fulldf = pd.concat([mystats,fulldf])
+            fulldf = pd.concat([fulldf,mystats])
 
-        fulldf.to_csv(myStatsOutputPath)
-        #fulldf.groupby('Redaction_Type').count()[['Redacted_String']]
-
-
-
-
+        if not myRedactList:
+            file = open(myStatsOutputPath, "w")
+            file.write("No redactions were made this time!")
+            file.close()
+        else:
+            #print(fulldf)
+            fulldf.to_csv(myStatsOutputPath, index=False)
 
 
 def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
@@ -407,56 +404,72 @@ def redact(documents):
 
 if __name__ == '__main__':
 
-    #KEY PIECE OF ARGPARSE CODE! parser.add_argument('file', type=argparse.FileType('r'), nargs='+')
-    #From https://stackoverflow.com/questions/26727314/multiple-files-for-one-argument-in-argparse-python-2-7
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--input',
+                        help="Please input either *.txt, *.md, or folder/*.txt, or folder/*.md. These are the only supported options currently. \
+                                   If you omit this flag, the default is *.txt, which will locate all the .txt files in the project directory and redact them.",
+                        action='append')
+    parser.add_argument('--names', help= "A boolean flag indicating if you want names redacted or not. Defaults to false.", action = "store_true")
+    parser.add_argument('--dates',
+                        help="A boolean flag indicating if you want dates redacted or not. Defaults to false.",
+                        action="store_true")
+    parser.add_argument('--gender',
+                        help="A boolean flag indicating if you want genders redacted or not. Defaults to false.",
+                        action="store_true")
 
-    # YAY, take a look at this website for --input a --input b to be converted to a list:
-    # https://docs.python.org/2/library/argparse.html#action
-    # 'append' - This stores a list, and appends each argument value to the list. This is useful to allow an option to be specified multiple times. Example usage:
-    # >>> parser = argparse.ArgumentParser()
-    # >>> parser.add_argument('--foo', action='append')
-    # >>> parser.parse_args('--foo 1 --foo 2'.split())
-    # Namespace(foo=['1', '2'])
+    parser.add_argument('--concept',
+                        help="A string, where you decide what concept to redact. The program will find similar words and redact \
+                        them. So for example, if you provide the word 'politics', it will redact words like 'election', 'congress', 'president', etc.",
+                        action='append')
+
+    parser.add_argument('--output',
+                        help = "An output folder for the redacted documents, the default is 'CURDIR/output/', but you can set it to a different name if desired.",)
+    parser.add_argument('--stats',
+                        help = "Must be either 'stdout', 'stderr', or a string of your choosing (ex. 'mycoolstats') to output a .csv. Defaults to stdout.")
+
+    args = parser.parse_args()
 
 
-    findNamesFlag = True
-    findGendersFlag = False
-    findDatesFlag = False
-    findConceptFlag = False
-    conceptWord1 = "politics"
-    conceptWord2 = "virus"
-    fileext = "*.txt"   #need to update findDocs to accept folder inputs as well, like "cooldocs/*.txt"
+    if args.input is not None:
+        for i in range(0,len(args.input)):
+            findDocs(args.input[i])
+    else:
+        findDocs('*.txt')
 
-
-
-    findDocs(fileext)
-
-    unredactedDocs = []
-
-    if(myFileNames):
+    if myFileNames:
         for x in range(0,len(myFileNames)):
             myFile1 = open(myFileNames[x], 'r', encoding="utf8")
             unredactedDocs.append(myFile1.read())
             myFile1.close()
 
-    myRedactList = []
 
-    findNames(unredactedDocs, findNamesFlag, False)
-    findGenders(unredactedDocs, findGendersFlag, findNamesFlag)
-    findDates(unredactedDocs, findDatesFlag)
-    findConcepts(unredactedDocs, conceptWord1, findConceptFlag)
-    findConcepts(unredactedDocs, conceptWord2, findConceptFlag)
+    if args.names:
+        findNames(unredactedDocs, False)
+        findNamesFlag = True
+    else:
+        findNamesFlag = False
+
+    if args.dates:
+        findDates(unredactedDocs)
+
+    if args.gender:
+        findGenders(unredactedDocs, findNamesFlag)
+
+    if args.concept is not None:
+        for i in range(0,len(args.concept)):
+            findConcepts(unredactedDocs, args.concept[i])
+
 
     redact(unredactedDocs)
+    if not args.stats:
+        runStats("stdout",myFileNames)
+    else:
+        runStats(args.stats, myFileNames)
 
-    print(myRedactList)
-
-    runStats("coolstats",myFileNames)
-    #outputDoc(myFileNames, myRedactedDocs)
-
-
-    #for x in range(0,len(myRedactedDocs)):
-    print(myRedactedDocs[1])
+    if not args.output:
+        outputDoc(myFileNames, myRedactedDocs)
+    else:
+        outputDoc(myFileNames, myRedactedDocs, foldername = args.output)
 
 
 
