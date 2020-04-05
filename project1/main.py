@@ -14,19 +14,6 @@ import sys
 
 
 
-
-#Had to add some exceptions b/c Spacy's model isn't perfect. These are specific to my test files in the docs/ folder.
-#ruler = EntityRuler(nlp, overwrite_ents=True)
-#patterns = [{"label": "PERSON", "pattern": [{"LOWER": "secretary"}, {"LOWER": "of state"}]},
-#            {"label": "PERSON", "pattern": "Sanders"},
-#            {"label": "PERSON", "pattern": "Peter F. Nardulli"},
-#            {"label": "PERSON", "pattern": "Hillary Clinton"},
-#            {"label": "ORG", "pattern": "Charlotte Hornets"}]
-
-#ruler.add_patterns(patterns)
-#nlp.add_pipe(ruler)
-
-
 #GLOBAL VARIABLES!
 myFileNames = []
 myRedactedDocs = []
@@ -50,29 +37,87 @@ matcher = Matcher(nlp.vocab)
 #Still To-Do:
 # TESTS!!!!!
 # Write Readme.md!!
-# fix findDocs so that it can accept folder inputs as well.
+# fix outputDocs so that it checks for a valid folder, sends error if not valid.
+# Update findConcepts() so that it can deal with inputs containing quotes.
 # fix stats so that it outputs to the same folder as outputdocs.
 
 
 def findDocs(userglob):
+
+
+    # There are really only 12 valid inputs to this function:
+    # *.txt, '*.txt', "*.txt",
+    # *.md , '*.md' , "*.md"
+    # folder/*.txt , 'folder/*.txt', "folder/*.txt"
+    # folder/*.md, 'folder/*.md', "folder/*.md"
     # This function takes in a glob like *.txt and appends a list of all the file names with that extension it can find.
     myInput = userglob
 
-    folderCheck = re.compile(r".*/\.\*")
 
-    if myInput == '*.txt':
+
+    folderCheck = re.compile(r"[\'\"]?(\w*)([/\\])\*\.([tm][xd]t?)[\'\"]?")
+    folderMatch = re.search(folderCheck, myInput)
+
+    if folderMatch: #Asks, does the string have the form "folder/*.txt" or "folder\*.txt"  ?
+        if sys.platform == "win32": #Ensures that the provided folder has backslashes if you are on windows.
+            myFolder = folderCheck.sub(r"\\\\\1", myInput)
+            myFiles = folderCheck.sub(r"\.\3", myInput) #Will be the string txt or md
+        else:
+            myFolder = folderCheck.sub( r"/\1", myInput) #Otherwise, ensures it is a forward slash.
+            myFiles = folderCheck.sub(r"\.\3", myInput) #Will be the string txt or md
+
+        #myFolder is now the string "/folder" or "\\folder". This is our new regex pattern.
+        myFolderPattern = re.compile(myFolder)
+        myFilePattern = re.compile(myFiles)
+        folderExists = False
+        for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            myFolderMatch = re.search(myFolderPattern, files[0])
+            if myFolderMatch:
+                #print("Found a folder match!")
+                folderExists = True
+                for items in files[2]:
+                    myFileMatch = re.search(myFilePattern, items)
+                    if myFileMatch:
+                        #print("Found a file match!")
+                        if sys.platform == "win32":
+                            currentFilePath = (files[0] + '\\' + items)
+                        else:
+                            currentFilePath = (files[0] +'/' + items)
+                        myFileNames.append(currentFilePath)
+
+        if not folderExists:
+            raise NameError("Sorry, the folder " + myFolder + " you specified does not exist. Please input a valid folder name.")
+
+
+    elif myInput == '*.txt' or myInput == "'*.txt'" or myInput == r"*.txt":
         myPattern = re.compile(r'\.txt$')
-    elif myInput == "*.md":
+        for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            for items in files[2]:
+                myMatch = re.search(myPattern, items)
+                if myMatch:
+                    if sys.platform == "win32":
+                        currentFilePath = (files[0] + '\\' + items)
+                    else:
+                        currentFilePath = (files[0] +'/' + items)
+                    myFileNames.append(currentFilePath)
+
+    elif myInput == "*.md" or myInput == "'*.md'" or myInput == r"*.md":
         myPattern = re.compile(r'\.md$')
+        for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
+            for items in files[2]:
+                myMatch = re.search(myPattern, items)
+                if myMatch:
+                    if sys.platform == "win32":
+                        currentFilePath = (files[0] + '\\' + items)
+                    else:
+                        currentFilePath = (files[0] + '/' + items)
+                    myFileNames.append(currentFilePath)
+
     else:
         raise NameError("Sorry, the --input glob was neither '*.txt' or '*.md' or 'folder/*.txt' or 'folder/*.txt'")
 
-    for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
-        for items in files[2]:
-            myMatch = re.search(myPattern, items)
-            if myMatch:
-                currentFilePath = (files[0] + '\\' + items)
-                myFileNames.append(currentFilePath)
+    #This loop finds ALL the *.txt or *.md files anywhere in the project directory. Maybe a little dangerous but it works.
+
 
 
 def findTokenLocs(document, myToken):
@@ -159,7 +204,7 @@ def findGenders(documents, nameFlag):
     # Assume all names are Gendered, or would giveaway the gender. Just call findNames here to be safe.
     # No need to call it if its already been called.
     if not nameFlag:
-        findNames(documents, True, True)
+        findNames(documents, True)
 
     for i in range(0,len(documents)):
         thisRedactList = []
@@ -202,8 +247,15 @@ def findDates(documents):
 
 def findConcepts(documents, concept):
 
-    #Ok, need to build a similarity matrix for each word. Anything over 0.45 gets included as similar and added
+    #Ok, need to build a similarity matrix for each word. Anything over 0.5 gets included as similar and added
     #to the redact list.
+    #First, check and see if the input has quotes or not. Need to remove those if it does.
+    conceptCheck = re.compile(r"[\'\"](\w*)[\'\"]")
+    conceptMatch = conceptCheck.search(concept)
+
+    if conceptMatch:
+        concept = conceptCheck.sub(r"\1",concept)
+
     conceptdoc = nlp(concept)
     if not conceptdoc[0].has_vector:
         raise NameError("Apologies, the concept you entered has no word vector in the Spacy model. This means it can't assign similarity scores! Please try again with a more common word, or maybe check your spelling?")
@@ -231,7 +283,7 @@ def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
-def runStats(outputType, fileNames):
+def runStats(outputType, fileNames, foldername = "output\\"):
 
     if outputType == "stdout":
         for i in range(0,len(myRedactList)):
@@ -247,7 +299,7 @@ def runStats(outputType, fileNames):
             else:
                 print(mystats.groupby('Redaction_Type').count()[['Redacted_String']])
 
-    if outputType == "stderr":
+    elif outputType == "stderr":
         for i in range(0, len(myRedactList)):
             simpleFileName = os.path.basename(fileNames[i])
             mystats = pd.DataFrame(myRedactList[i])
@@ -263,12 +315,32 @@ def runStats(outputType, fileNames):
 
     else:
         if not type(outputType) == str:
-            raise NameError("Please provide either 'stdout', 'stderr', or a string input (filename) to the --stats flag. Your input was not a string." )
-        #The outputType is a string, which will be used as a file, outputted to the same folder where output doc goes.
-        #outputCheck = re.compile(r".*/$")
-        #if not re.search(outputCheck,outputType):
-            #raise NameError("The string passed to ")
-        myStatsOutputPath = os.path.join(os.getcwd(),str(outputType + ".csv"))
+            raise NameError("Please provide either 'stdout', 'stderr', or a string input (filename) to the --stats flag. Your input was not a string.")
+
+        if foldername == "output\\" and not sys.platform == "win32":  # Does a quick check to see if you are on Windows or not.
+            foldername = "output/"  # Switches the default filepath if so.
+
+            # Needs to check for a valid foldername input here.
+        folderCheck = re.compile(r"[\'\"]?(\w*)([/\\])[\'\"]?")
+        folderMatch = re.search(folderCheck, foldername)
+        if folderMatch:
+            if sys.platform == "win32":
+                foldername = folderCheck.sub(r"\1\\", foldername)
+            else:
+                foldername = folderCheck.sub(r"\1/", foldername)
+
+            #Need to check and remove quotes if output type had quotes.
+            outputTypeCheck = re.compile(r"'(\w*)'")
+            outputTypeCheck2 = re.compile(r'"(\w*)"')
+            outputMatch1 = outputTypeCheck.search(outputType)
+            outputMatch2 = outputTypeCheck2.search(outputType)
+
+            if outputMatch1:
+                outputType = outputTypeCheck.sub(r"\1", outputType)
+            elif outputMatch2:
+                outputType = outputTypeCheck2.sub(r"\1", outputType)
+
+            myStatsOutputPath = os.path.join(os.getcwd(), foldername, str(outputType + ".csv"))
 
             # Here is what you will do.
             # First, take your pandas df, and add a column called from_file
@@ -276,24 +348,26 @@ def runStats(outputType, fileNames):
             # Merge this modified df with a larger df, until all are added.
             #       pd.concat(objs, axis=0, join='outer', ignore_index=False, keys=None,
             #           levels=None, names=None, verify_integrity=False, copy=True)
-        fulldf = pd.DataFrame()
-        for i in range(0,len(myRedactList)):
-            simpleFileName = os.path.basename(fileNames[i])
-            mystats = pd.DataFrame(myRedactList[i])
-            mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
-            fileList = []
-            for j in range(0,len(mystats.index)):
-                fileList.append(simpleFileName)
-            mystats['from_file'] = fileList
-            fulldf = pd.concat([fulldf,mystats])
+            fulldf = pd.DataFrame()
+            for i in range(0,len(myRedactList)):
+                simpleFileName = os.path.basename(fileNames[i])
+                mystats = pd.DataFrame(myRedactList[i])
+                mystats = mystats.rename(columns={0: "Redacted_String", 1: "Token_Location", 2: "Redaction_Type"})
+                fileList = []
+                for j in range(0,len(mystats.index)):
+                    fileList.append(simpleFileName)
+                mystats['from_file'] = fileList
+                fulldf = pd.concat([fulldf,mystats])
 
-        if not myRedactList:
-            file = open(myStatsOutputPath, "w")
-            file.write("No redactions were made this time!")
-            file.close()
+            if not myRedactList:
+                file = open(myStatsOutputPath, "w")
+                file.write("No redactions were made this time!")
+                file.close()
+            else:
+                #print(fulldf)
+                fulldf.to_csv(myStatsOutputPath, index=False)
         else:
-            #print(fulldf)
-            fulldf.to_csv(myStatsOutputPath, index=False)
+            raise NameError("Sorry, the folder you specified to --output is not a valid folder path. Did you forget to add a '/'? Please input something like: 'myoutput/' or 'output/'")
 
 
 def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
@@ -302,21 +376,29 @@ def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
         foldername = "output/" #Switches the default filepath if so.
 
     #Needs to check for a valid foldername input here.
+    folderCheck = re.compile(r"[\'\"]?(\w*)([/\\])[\'\"]?")
+    folderMatch = re.search(folderCheck, foldername)
+    if folderMatch:
+        if sys.platform == "win32":
+            foldername = folderCheck.sub(r"\1\\", foldername)
+        else:
+            foldername = folderCheck.sub(r"\1/", foldername)
 
-    myOutputDir = os.path.join(os.getcwd(),foldername)
-    if not os.path.exists(myOutputDir):
-        os.mkdir(myOutputDir)
+        myOutputDir = os.path.join(os.getcwd(),foldername)
+        if not os.path.exists(myOutputDir):
+            os.mkdir(myOutputDir)
 
-    for i in range(0,len(fileNames)):
-        baseFileName = os.path.basename(fileNames[i])
-        newPathName = str(myOutputDir + baseFileName + ".redacted")
+        for i in range(0,len(fileNames)):
+            baseFileName = os.path.basename(fileNames[i])
+            newPathName = str(myOutputDir + baseFileName + ".redacted")
 
-        myUnicodeDoc = str(redactedDocs[i]).encode("utf8")
+            myUnicodeDoc = str(redactedDocs[i]).encode("utf8")
 
-        with open(newPathName, "wb") as file:
-            file.write(myUnicodeDoc)
-            file.close()
-
+            with open(newPathName, "wb") as file:
+                file.write(myUnicodeDoc)
+                file.close()
+    else:
+        raise NameError("Sorry, the folder you specified to --output is not a valid folder path. Did you forget to add a '/'? Please input something like: 'myoutput/' or 'output/'")
 
 def redact(documents):
 
@@ -413,7 +495,7 @@ if __name__ == '__main__':
     parser.add_argument('--dates',
                         help="A boolean flag indicating if you want dates redacted or not. Defaults to false.",
                         action="store_true")
-    parser.add_argument('--gender',
+    parser.add_argument('--genders',
                         help="A boolean flag indicating if you want genders redacted or not. Defaults to false.",
                         action="store_true")
 
@@ -425,7 +507,7 @@ if __name__ == '__main__':
     parser.add_argument('--output',
                         help = "An output folder for the redacted documents, the default is 'CURDIR/output/', but you can set it to a different name if desired.",)
     parser.add_argument('--stats',
-                        help = "Must be either 'stdout', 'stderr', or a string of your choosing (ex. 'mycoolstats') to output a .csv. Defaults to stdout.")
+                        help = "Must be either 'stdout', 'stderr', or a string of your choosing (ex. 'mycoolstats') to output a .csv. If --stats is not called, no stats are produced.")
 
     args = parser.parse_args()
 
@@ -452,7 +534,7 @@ if __name__ == '__main__':
     if args.dates:
         findDates(unredactedDocs)
 
-    if args.gender:
+    if args.genders:
         findGenders(unredactedDocs, findNamesFlag)
 
     if args.concept is not None:
@@ -461,10 +543,6 @@ if __name__ == '__main__':
 
 
     redact(unredactedDocs)
-    if not args.stats:
-        runStats("stdout",myFileNames)
-    else:
-        runStats(args.stats, myFileNames)
 
     if not args.output:
         outputDoc(myFileNames, myRedactedDocs)
@@ -472,4 +550,8 @@ if __name__ == '__main__':
         outputDoc(myFileNames, myRedactedDocs, foldername = args.output)
 
 
-
+    if args.stats:
+        if not args.output:
+            runStats(args.stats, myFileNames)
+        else:
+            runStats(args.stats, myFileNames, foldername = args.output)
