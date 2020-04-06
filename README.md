@@ -1,4 +1,6 @@
 # cs5293sp20-project1
+README is under construction! Will have it up and ready Monday, April 6th.
+
 This project redacts user-inputted words or phrases from text documents
 
 To run, you must install the correct Spacy model. Type this into your command line:
