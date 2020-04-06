@@ -89,7 +89,7 @@ def findDocs(userglob):
             raise NameError("Sorry, the folder " + myFolder + " you specified does not exist. Please input a valid folder name.")
 
 
-    elif myInput == '*.txt' or myInput == "'*.txt'" or myInput == r"*.txt":
+    elif myInput == '*.txt' or myInput == r"'*.txt'" or myInput == r"*.txt":
         myPattern = re.compile(r'\.txt$')
         for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
             for items in files[2]:
@@ -98,7 +98,7 @@ def findDocs(userglob):
                     if sys.platform == "win32":
                         currentFilePath = (files[0] + '\\' + items)
                     else:
-                        currentFilePath = (files[0] +'/' + items)
+                        currentFilePath = (files[0] + '/' + items)
                     myFileNames.append(currentFilePath)
 
     elif myInput == "*.md" or myInput == "'*.md'" or myInput == r"*.md":
@@ -114,7 +114,7 @@ def findDocs(userglob):
                     myFileNames.append(currentFilePath)
 
     else:
-        raise NameError("Sorry, the --input glob was neither '*.txt' or '*.md' or 'folder/*.txt' or 'folder/*.txt'")
+        raise NameError("Sorry, the --input glob was neither '*.txt' or '*.md' or 'folder/*.txt' or 'folder/*.md' - Don't forget the quotes ('' or "") ! ")
 
     #This loop finds ALL the *.txt or *.md files anywhere in the project directory. Maybe a little dangerous but it works.
 

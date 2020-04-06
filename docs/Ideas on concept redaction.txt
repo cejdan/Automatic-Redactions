@@ -1,7 +1,0 @@
-For redaction of concepts:
-
-Add 'concept' word or phrase to your word list
-Seperate out your document into word tokens (or phrase tokens, if phrase was inputted, possibly)
-cluster the word tokens or phrase tokens with some fancy NLTK or spacy ML algorithm (HOPEFULLY THIS EXISTS LOL)
-Flag all words x distance away from the concept word or phrase as redaction
-Redact all flagged words
