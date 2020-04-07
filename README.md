@@ -1,4 +1,4 @@
-#Project Outline and Overview
+# Project Outline and Overview
 
 This project redacts Names, Dates, Genders, or user-defined "Concept" related words from text documents. So if you provide the concept word "Politics", it will redact words like "Election", "government", "president", etc.
 These concepts can be any single words that are common in the English language, like "Politics", or "virus" or what have you.
@@ -22,13 +22,13 @@ Running this project has two steps:
 This Spacy model is 96.4 Mb, so please ensure your computer or VM has enough space!
 I chose the en_core_web_md because it has word vectors, but isn't quite as large as the en_core_web_lg model. It is a compromise between disc space, speed, and accuracy. The larger models have better similarity word vectors, so they have better similarity scores, but it takes more disc space, and runs more slowly. The medium sized model works just fine for this project.
 
-#Running the program
+# Running the program
 
 To run the program, navigate to your project directory in your command shell, and type:
 
     pipenv run python project1/main.py --input '\*.txt' --names --genders --dates --concept 'politics' --concept 'virus' --output myfolder/ --stats mystats
 
-##Descriptions and parameters for each flag
+## Descriptions and parameters for each flag
 
 Parameter Flag | Accepted values | Description
 -------------- | --------------- | ------------
@@ -41,7 +41,7 @@ Parameter Flag | Accepted values | Description
 --stats | stdout, stderr, or 'filename' | Optional, allows the user to choose how the run statistics are displayed, defaults to stdout if omitted, and if 'filename' is specified, it outputs a .csv to the same location as --output.
 
 
-#Discussion of the Concepts method
+# Discussion of the Concepts method
 
 The way I approached the concept redactions was to use Spacy's .similarity() methods. The larger models, like en_core_web_md and en_core_web_lg both come with pre-defined Word Vectors for all the words in the model.
 We can use this, and generate a similarity score between 0 and 1 for each word in our document compared to our provided concept word. I used score >= 0.5 as considered similar enough to count as a redaction.
@@ -52,7 +52,7 @@ So, if you supply the word "virus", and your document contains the phrase, "The 
 This is a feature I would like to implement in the future.
 
 
-#Description of the Statistics Output and Method
+# Description of the Statistics Output and Method
 
 The runStats() function has three main outputs, stdout (prints to the screen), stderr (prints to the built-in Python error messaging system), and to .csv file.
 The stdout and stderr provide the same output, which is a list of each Redacted String, the Token Locations of the redaction, the type of redaction (like "Names" or "Genders"), broken up by document. 
@@ -62,7 +62,7 @@ This is the preferred output for a quick summary of the run.
 The file.csv output is designed for deeper analytics. It simply provides a .csv file, with the columns as Redacted String, Token Locations, Type of Redaction, and the FileName.
 This output is designed for a user who wants to do their own analysis, and thus intentionally does not provide the summary like stdout and stderr.
 
-#Descriptions of the Functions in the code 
+# Descriptions of the Functions in the code 
 
 More detailed comments are provided in the code itself, but I will describe each function briefly here.
 
@@ -80,7 +80,7 @@ redact(documents) | accepts a list of documents, and uses the generated myRedact
 
 
 
-#Descriptions of Tests
+# Descriptions of Tests
 
 I have included a test (or tests) for each method described above. I will describe the tests briefly here.
 The tests touch essentally all lines of my main.py code.
@@ -98,7 +98,7 @@ test_runStats() | Tests to ensure if a filename is provided, that a .csv is crea
 
 
 
-#Limitations of the Redaction Program
+# Limitations of the Redaction Program
 
 Let's face it, this redaction program is not perfect. The documents MUST be checked to ensure they adequately meet your redaction needs.
 Often it will miss names, or redact incorrect items, or will be too strict or too loose with your Concepts, and It also currently does not support redacting Phrases from your provided concepts.
