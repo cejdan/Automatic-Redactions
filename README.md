@@ -8,16 +8,16 @@ Currently this project does not support multi-word concepts like "the United Sta
 Running this project has two steps:
 1. Ensure you have pipenv installed, clone the Github repo, then run in a command shell:
 
-
-    pipenv install
-
-
+```
+pipenv install
+```
 
 2. Then, you must install the correct Spacy model. Type this into your command line:
 
-
-    pipenv run python -m spacy download en_core_web_md 
-
+```
+pipenv run python -m spacy download en_core_web_md
+```
+    
 
 This Spacy model is 96.4 Mb, so please ensure your computer or VM has enough space!
 I chose the en_core_web_md because it has word vectors, but isn't quite as large as the en_core_web_lg model. It is a compromise between disc space, speed, and accuracy. The larger models have better similarity word vectors, so they have better similarity scores, but it takes more disc space, and runs more slowly. The medium sized model works just fine for this project.
