@@ -8,13 +8,14 @@ import re
 import os
 import spacy
 from spacy.matcher import Matcher
-from spacy.pipeline import EntityRuler
+
 import pandas as pd
 import sys
 
 
 
 #GLOBAL VARIABLES!
+#We will use these lists, Spacy model, and spacy Matcher object across multiple methods.
 myFileNames = []
 myRedactedDocs = []
 unredactedDocs = []
@@ -30,16 +31,9 @@ matcher = Matcher(nlp.vocab)
 # DONE 3 - Redact all words and related words from the provided 'concept' flag(s) - can use word matrices from Spacy.
 #     1 method call for each provided concept flag.
 # DONE 4 - Actually replace all redacted words with either a single Block U+2588 character, or multiple block characters.
-# DONE - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
-# DONE - Generate a statistics function, which prints information about the run to stdout, stderr, or a file.
-# 7 - Write tests for each method in seperate test_etc.py files.
-
-#Still To-Do:
-# TESTS!!!!!
-# Write Readme.md!!
-# fix outputDocs so that it checks for a valid folder, sends error if not valid.
-# Update findConcepts() so that it can deal with inputs containing quotes.
-# fix stats so that it outputs to the same folder as outputdocs.
+# DONE 5 - Output the redacted files to a folder provided by the user (or default to output/ if none provided)
+# DONE 6 - Generate a statistics function, which prints information about the run to stdout, stderr, or a file.
+# DONE 7 - Write tests for each method in separate test_etc.py files.
 
 
 def findDocs(userglob):
@@ -50,45 +44,50 @@ def findDocs(userglob):
     # *.md , '*.md' , "*.md"
     # folder/*.txt , 'folder/*.txt', "folder/*.txt"
     # folder/*.md, 'folder/*.md', "folder/*.md"
-    # This function takes in a glob like *.txt and appends a list of all the file names with that extension it can find.
+    # This function takes in a glob like *.txt or folder/*.txt and appends a list of all the file names with that extension it can find.
+
+
     myInput = userglob
 
-
-
+    #This regex's job is to find valid folder name inputs. It looks for things like 'coolfolder\\*.txt' or 'myfolder/*.md'
     folderCheck = re.compile(r"[\'\"]?(\w*)([/\\])\*\.([tm][xd]t?)[\'\"]?")
     folderMatch = re.search(folderCheck, myInput)
 
     if folderMatch: #Asks, does the string have the form "folder/*.txt" or "folder\*.txt"  ?
         if sys.platform == "win32": #Ensures that the provided folder has backslashes if you are on windows.
-            myFolder = folderCheck.sub(r"\\\\\1", myInput)
+            myFolder = folderCheck.sub(r"\\\\\1", myInput) #will be the string \\myfolder
             myFiles = folderCheck.sub(r"\.\3", myInput) #Will be the string txt or md
         else:
-            myFolder = folderCheck.sub( r"/\1", myInput) #Otherwise, ensures it is a forward slash.
+            myFolder = folderCheck.sub( r"/\1", myInput) #Otherwise, ensures it is a forward slash, so, /myfolder
             myFiles = folderCheck.sub(r"\.\3", myInput) #Will be the string txt or md
 
         #myFolder is now the string "/folder" or "\\folder". This is our new regex pattern.
         myFolderPattern = re.compile(myFolder)
         myFilePattern = re.compile(myFiles)
         folderExists = False
+
+        # This for loop takes the current file's location, and goes up two directories, then it recursively checks all subdirectories looking for any
+        # folders with the pattern "/folder" or "\\folder"
         for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
             myFolderMatch = re.search(myFolderPattern, files[0])
             if myFolderMatch:
-                #print("Found a folder match!")
                 folderExists = True
-                for items in files[2]:
-                    myFileMatch = re.search(myFilePattern, items)
+                for items in files[2]: #These items in files[2] are the actual file names inside that folder.
+                    myFileMatch = re.search(myFilePattern, items) #We can then do a regex search on them, to see if they match our *.txt or *.md pattern.
                     if myFileMatch:
                         #print("Found a file match!")
                         if sys.platform == "win32":
                             currentFilePath = (files[0] + '\\' + items)
                         else:
                             currentFilePath = (files[0] +'/' + items)
-                        myFileNames.append(currentFilePath)
+                        myFileNames.append(currentFilePath) #When we find a hit, we append that file's whole path to myFileNames, for later use by other methods.
 
         if not folderExists:
             raise NameError("Sorry, the folder " + myFolder + " you specified does not exist. Please input a valid folder name.")
 
 
+    # If the user input simply *.txt, we will find ALL *.txt files anywhere in the project directory!
+    # If this behavior is not desired, use the "folder/*.txt" input mode instead!
     elif myInput == '*.txt' or myInput == r"'*.txt'" or myInput == r"*.txt":
         myPattern = re.compile(r'\.txt$')
         for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
@@ -101,6 +100,7 @@ def findDocs(userglob):
                         currentFilePath = (files[0] + '/' + items)
                     myFileNames.append(currentFilePath)
 
+    #Same thing for the *md files. This will even find the README.md and redact it as well!
     elif myInput == "*.md" or myInput == "'*.md'" or myInput == r"*.md":
         myPattern = re.compile(r'\.md$')
         for files in os.walk(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))):
@@ -116,22 +116,19 @@ def findDocs(userglob):
     else:
         raise NameError("Sorry, the --input glob was neither '*.txt' or '*.md' or 'folder/*.txt' or 'folder/*.md' - Don't forget the quotes ('' or "") ! ")
 
-    #This loop finds ALL the *.txt or *.md files anywhere in the project directory. Maybe a little dangerous but it works.
-
-
 
 def findTokenLocs(document, myToken):
     #Needs to return a list of all the places token hits in document. Ex, [[20:21],[300:301]]
     #This method only handles single tokens for now. Building it for the findGender method.
-    doc = nlp(document)
+    doc = nlp(document) #Create a new nlp model of our document. Pretty slow!! But it works.
     patternstr = [{'LOWER': str(myToken)}]
-    matcher.add(str(myToken), None, patternstr)
-    matches = matcher(doc)
+    matcher.add(str(myToken), None, patternstr) #We add a pattern to our pattern matcher, with the provided myToken.
+    matches = matcher(doc) #We add all the matches to a matches variable.
     myMatchLocs = []
     for i in range(0,len(matches)):
-        myMatchLocs.append([matches[i][1], matches[i][2]])
-    matcher.remove(str(myToken))
-    return myMatchLocs
+        myMatchLocs.append([matches[i][1], matches[i][2]]) #myMatchLocs will contain all the match locations in the format we want.
+    matcher.remove(str(myToken)) #We need this matcher.remove statement to clean up the matcher. Without this, incorrect matches pop up.
+    return myMatchLocs #Returns a list of matches, like [[10,11],[33,34]]
 
 
 def findNames(documents, fromGender):
@@ -143,18 +140,20 @@ def findNames(documents, fromGender):
         doc = nlp(documents[i])
         thisRedactList = []
 
+        #We search the named entities in our nlp model.
         for ent in doc.ents:
-            #print(ent.text, ent.label_)
             foundNP = False
             if ent.label_ == "PERSON":
 
                 #Now is the time to find out what the token locations are for this span of tokens
                 token_locs = [ent.start, ent.end]
 
-                #pattern = re.compile(ent.text)
+                # We want to know if the entity is part of a larger noun phrase. For example,
+                # If our named entity is "Mike DeWine", we want to fully redact the phrase "Ohio Gov. Mike DeWine"
+                # It is still super obvious who you are talking about if you don't redact "Ohio Gov." as well!
+                # This loop logic handles these cases.
                 for noun_chunks in doc.noun_chunks:
                     if noun_chunks.start <= ent.start and ent.end <= noun_chunks.end:
-                        #print(noun_chunks.text)
                         token_locs = [noun_chunks.start, noun_chunks.end]
                         if fromGender:
                             mySmallList = [noun_chunks.text, token_locs, "Gender"]
@@ -164,17 +163,20 @@ def findNames(documents, fromGender):
                         foundNP = True
 
                 if not foundNP:
-                    if fromGender:
+                    if fromGender: #Here we ask if we are coming from the findGenders method. If so, we append "Genders" instead of "Names"
                         mySmallList = [ent.text, token_locs, "Gender"]
                     else:
                         mySmallList = [ent.text, token_locs, "Names"]
 
                     thisRedactList.append(mySmallList)
 
+        # This bit of code is reused in all the findX methods. Basically it ensures that len(myRedactList) will always match the
+        # length of the number documents being used in the run, no matter if findNames, findGenders, findDates, or findConcepts
+        # is run first.
+        # This allows us to ALWAYS know that myRedactList[0] corresponds to myDocument[0]. Very useful when doing our stats function.
         if len(myRedactList) == len(documents) and len(thisRedactList) > 0:
             for j in range(0,len(thisRedactList)):
                 myRedactList[i].append(thisRedactList[j])
-        #elif len(thisRedactList) > 0:
         elif len(myRedactList) < len(documents):
             myRedactList.append(thisRedactList)
 
@@ -184,6 +186,11 @@ def findGenders(documents, nameFlag):
 # Some of the Male and Female words were taken from
 # https://medium.com/@rajat.jain1/natural-language-extraction-using-spacy-on-a-set-of-novels-88b159d68686
 # and https://www.thefreedictionary.com/List-of-pronouns.htm
+
+# This method is by far my most inefficient. It is SLOW! Mostly because it re-creates a new nlp doc object every single loop.
+# If I were to upgrade any method in this program, I would start here, to improve the speed. But it works for now.
+# Also, the words chosen here are only a tiny subset of the English gendered-words. I had to remove tons of uncommon words to speed
+# up the method ('dutchess' and 'duke', etc.). This list is serviceable for our purposes here.
 
     # Pronouns, Titles,  Descriptions,  Relationships,  Royalty
     female_words = ["she", "her", "hers", "herself",
@@ -206,17 +213,19 @@ def findGenders(documents, nameFlag):
     if not nameFlag:
         findNames(documents, True)
 
-    for i in range(0,len(documents)):
+    for i in range(0,len(documents)): #Loop for each document we want to redact.
         thisRedactList = []
         mySmallList = []
+        #Loop once for every word in the gendered word list.
         for word in gendered_words:
-            locationlist = findTokenLocs(documents[i], word)
+            locationlist = findTokenLocs(documents[i], word) #Run our findTokenLocs for every word.
             for j in range(0,len(locationlist)):
                 token_locs = [locationlist[j][0],locationlist[j][1]]
                 #print(word, locationlist[j][0],locationlist[j][1], "Gender")
                 mySmallList = [word, token_locs, "Gender"]
                 thisRedactList.append(mySmallList)
 
+        #This section is described in the findNames method.
         if len(myRedactList) == len(documents) and len(thisRedactList) > 0:
             for j in range(0,len(thisRedactList)):
                 myRedactList[i].append(thisRedactList[j])
@@ -225,6 +234,9 @@ def findGenders(documents, nameFlag):
 
 
 def findDates(documents):
+    # This method uses the named entity "DATE" from our Spacy model. It has some issues with things like ages,
+    # like it thinks "30 years old" is a date, but it does a decent job overall.
+    # The method strategy is the same as the findNames method.
 
     for i in range(0, len(documents)):
         doc = nlp(documents[i])
@@ -247,14 +259,19 @@ def findDates(documents):
 
 def findConcepts(documents, concept):
 
-    #Ok, need to build a similarity matrix for each word. Anything over 0.5 gets included as similar and added
-    #to the redact list.
+    # Here we use Spacy's similarity functions to compare Word Vectors. If spacy gives a Similarity score of >= 0.5,
+    # that's good enough to redact.
+    # This method's limitation is that is does not deal with Phrases. Only single words. So concepts can slip through,
+    # for example, if you redact the concept "Politics", from the phrase "The Democratic Primary Election", it will only redact
+    # "Democratic" and "Elections", leaving the word "Primary."
+    # I would improve this method to include phrases with more time.
+
     #First, check and see if the input has quotes or not. Need to remove those if it does.
     conceptCheck = re.compile(r"[\'\"](\w*)[\'\"]")
     conceptMatch = conceptCheck.search(concept)
 
     if conceptMatch:
-        concept = conceptCheck.sub(r"\1",concept)
+        concept = conceptCheck.sub(r"\1",concept) #Removes the quotes, if they exist.
 
     conceptdoc = nlp(concept)
     if not conceptdoc[0].has_vector:
@@ -263,6 +280,7 @@ def findConcepts(documents, concept):
         thisRedactList = []
         doc = nlp(documents[i])
         for j in range(0,len(doc)):
+            #Only check words with similarity vectors.
             if doc[j].has_vector:
                 if doc[j].similarity(conceptdoc[0]) >= 0.5: #I really like >0.5, it works really nicely! Very impressive!
                     token_locs = [j, j+1]
@@ -279,11 +297,20 @@ def findConcepts(documents, concept):
 
 # This eprint method is taken directly from StackOverflow user MarcH:
 # https://stackoverflow.com/questions/5574702/how-to-print-to-stderr-in-python
+# The purpose is to provide a super easy way to print to stderr.
 def eprint(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 
 def runStats(outputType, fileNames, foldername = "output\\"):
+    # The stats function has 3 options, stdout, stderr, or create a csv file.
+    # We take advantage of the structure of myRedactList to generate this summary, and to know which file each redaction came from.
+    # I left the Redacted strings in on purpose, it greatly helps the user identify what is happening in the program.
+    # I built the program with the end user in mind who knows what is being redacted, and will publish or distribute only the
+    # redacted doc, not the stats summary.
+
+    # Note, The .csv file does not include a quick summary, like the stdout and stderr do. This is intentional, as
+    # I assume the user will do a more detailed analysis on the .csv than they will with the stdout or stderr outputs.
 
     if outputType == "stdout":
         for i in range(0,len(myRedactList)):
@@ -342,12 +369,11 @@ def runStats(outputType, fileNames, foldername = "output\\"):
 
             myStatsOutputPath = os.path.join(os.getcwd(), foldername, str(outputType + ".csv"))
 
-            # Here is what you will do.
+            # Here is what the following section does,
             # First, take your pandas df, and add a column called from_file
             # All the rows will get the simpleFileName of that filename[i]
             # Merge this modified df with a larger df, until all are added.
-            #       pd.concat(objs, axis=0, join='outer', ignore_index=False, keys=None,
-            #           levels=None, names=None, verify_integrity=False, copy=True)
+
             fulldf = pd.DataFrame()
             for i in range(0,len(myRedactList)):
                 simpleFileName = os.path.basename(fileNames[i])
@@ -372,6 +398,9 @@ def runStats(outputType, fileNames, foldername = "output\\"):
 
 def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
 
+    #OutputDoc's job is to put the redactedDocs into a specified folder.
+    #Needs to be run AFTER redact().
+
     if foldername == "output\\" and not sys.platform == "win32": #Does a quick check to see if you are on Windows or not.
         foldername = "output/" #Switches the default filepath if so.
 
@@ -388,7 +417,7 @@ def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
         if not os.path.exists(myOutputDir):
             os.mkdir(myOutputDir)
 
-        for i in range(0,len(fileNames)):
+        for i in range(0,len(redactedDocs)):
             baseFileName = os.path.basename(fileNames[i])
             newPathName = str(myOutputDir + baseFileName + ".redacted")
 
@@ -402,17 +431,20 @@ def outputDoc(fileNames, redactedDocs, foldername = "output\\"):
 
 def redact(documents):
 
-    #  OK, Going to totally re-write this method. We want to use the TOKEN LOCs, found at:
+    #  OK, This method is a little bit complex. Bear with me.
+    #  We want to use the TOKEN LOCs, found at:
     #  myRedactList[DOC i][RedactME j][TOKEN_LOC = 1][START(0) or STOP(1)]
     # And replace whatever tokens are there with a block.
     # Actually, we will use the original doc as a template, copying tokens and whitespace to a new file one by one until
     # we reach a BANNED token or token span. We won't write that or those tokens, we will instead write a single block.
-    # Do I need to find all contigious sequences and mush them together? Probably.
-    # Luckily sorting them is quick and easy with:
+    # I need to find all contiguous token spans, and deal with overlapping token spans.
+    # I want to replace long token spans with a SINGLE block. This is way more protected than each character being replaced.
+    # For example, "Ohio Gov. Mike DeWine" is replaced with a single block.
+    # Luckily sorting the token spans is quick and easy with:
     #for x in range(0, len(myRedactList)):
     #    fileRedactList = myRedactList[x]
     #    redactme = sorted(fileRedactList, key=lambda start_token: start_token[1][0])
-    #    Proceed with redaction using the redactme sorted list as your banned tokens.
+    # I can then proceed with redaction using the redactme sorted list as your banned tokens.
     # When redacting I can check if token.end[i] == token.start[i+1], these are uninterrupted redaction blocks.
     # Turn the whole thing (could be as large as a whole sentence) into one single block. "\u2588"
 
@@ -422,7 +454,7 @@ def redact(documents):
             myRedactedDocs.append(doc)
         return
 
-    redactMe = []
+    redactMe = [] #A temp list used just for sorting the token spans.
     for i in range(0, len(myRedactList)):
         fileRedactList = myRedactList[i]
         redactTemp = sorted(fileRedactList, key=lambda start_token: start_token[1][0])
@@ -430,10 +462,10 @@ def redact(documents):
 
     myRedactList.clear()
     for i in range(0,len(redactMe)):
-        myRedactList.append(redactMe[i])
+        myRedactList.append(redactMe[i])  #Re-append back to myRedactList, for consistency.
 
-    for i in range(0,len(documents)):
-        doc = nlp(documents[i])
+    for i in range(0,len(documents)): #This is a big loop, once for each document.
+        doc = nlp(documents[i]) #Create a new nlp doc object.
         redact_positions = []
         mydoc = ""
 
@@ -480,7 +512,7 @@ def redact(documents):
                 write_end = len(doc)
                 mydoc = mydoc + doc[write_start:write_end].text_with_ws
 
-
+        #By the end of this logic, we have generated a redacted document. Append it to myRedactedDocs, and start again for the next document.
         myRedactedDocs.append(mydoc)
 
 
@@ -512,46 +544,46 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
 
-    if args.input is not None:
+    if args.input is not None: #If user uses --input as a flag, take their input.
         for i in range(0,len(args.input)):
             findDocs(args.input[i])
-    else:
+    else: #If they omit the --input flag, assume a *.txt input.
         findDocs('*.txt')
 
-    if myFileNames:
+    if myFileNames: #Generates a list of file names.
         for x in range(0,len(myFileNames)):
             myFile1 = open(myFileNames[x], 'r', encoding="utf8")
             unredactedDocs.append(myFile1.read())
             myFile1.close()
 
 
-    if args.names:
+    if args.names: #If the user supplies the --names flag, run findNames()
         findNames(unredactedDocs, False)
         findNamesFlag = True
-    else:
+    else: #Otherwise, don't run it.
         findNamesFlag = False
 
-    if args.dates:
+    if args.dates: #Same with --dates
         findDates(unredactedDocs)
 
-    if args.genders:
+    if args.genders: #and --genders
         findGenders(unredactedDocs, findNamesFlag)
 
-    if args.concept is not None:
+    if args.concept is not None: #We run one findConcepts call for each --concept supplied to the command line.
         for i in range(0,len(args.concept)):
             findConcepts(unredactedDocs, args.concept[i])
 
 
-    redact(unredactedDocs)
+    redact(unredactedDocs) #Redact all unredactedDocs. Will do nothing if the myRedactList is empty or the unredactedDocs is empty.
 
-    if not args.output:
+    if not args.output: #Uses the default output/ folder if the --output flag is omitted.
         outputDoc(myFileNames, myRedactedDocs)
     else:
         outputDoc(myFileNames, myRedactedDocs, foldername = args.output)
 
 
-    if args.stats:
-        if not args.output:
+    if args.stats: #if --stats filename is included
+        if not args.output: #But if --output not specified, put the stats in the output// folder by default.
             runStats(args.stats, myFileNames)
-        else:
+        else: #Otherwise, put it wherever the --output is putting other output files.
             runStats(args.stats, myFileNames, foldername = args.output)
