@@ -1,4 +1,6 @@
-# Project Outline and Overview
+# Automatic redaction of full text documents using Spacy
+
+## Project Outline and Overview
 
 This project redacts Names, Dates, Genders, or user-defined "Concept" related words from text documents. So if you provide the concept word "Politics", it will redact words like "Election", "government", "president", etc.
 These concepts can be any single words that are common in the English language, like "Politics", or "virus" or what have you.
